@@ -44,4 +44,5 @@ Thumbs.db
 projects/demo/
 
 # Local demo/testing apps
-projects/
+projects/*
+!projects/ng-mtcaptcha/

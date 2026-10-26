@@ -1,7 +1,8 @@
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { BehaviorSubject, Subject, Observable, Subscriber } from 'rxjs';
-import { MTCaptchaOptions } from './mtcaptcha.types';
+import { MTCaptchaOptions, MTCaptchaStatus } from './mtcaptcha.types';
+import { buildMTCaptchaConfig } from './mtcaptcha.config';
 
 @Injectable({
   providedIn: 'root'
@@ -82,9 +83,9 @@ export class MTCaptchaService {
       if (typeof token === 'string') {
         tokenString = token;
       } else if (token && typeof token === 'object') {
-        // If it's an object, try to extract the token
+        // MTCaptcha passes its state object, which holds the token in verifiedToken
         // Check common properties where token might be stored
-        tokenString = token.token || token.value || token.detail || token.data || JSON.stringify(token);
+        tokenString = token.verifiedToken || token.token || token.value || token.detail || token.data || JSON.stringify(token);
         // If still an object, try to stringify it properly
         if (typeof tokenString !== 'string') {
           tokenString = String(token);
@@ -134,33 +135,7 @@ export class MTCaptchaService {
       windowAny.mtcaptchaConfig.renderQueue = [];
     }
 
-    const config: any = {
-      sitekey: options.sitekey,
-    };
-
-    // Add theme if provided (supports any theme value, not just 'light'|'dark')
-    if (options.theme) {
-      config.theme = options.theme;
-    }
-
-    // Add widgetSize if provided (default: 'standard')
-    if (options.widgetSize) {
-      config.widgetSize = options.widgetSize;
-    }
-
-    // Add custom language text if provided
-    if (options.customLangText) {
-      config.customLangText = typeof options.customLangText === 'string' 
-        ? JSON.parse(options.customLangText) 
-        : options.customLangText;
-    }
-
-    // Add custom style if provided
-    if (options.customStyle) {
-      config.customStyle = typeof options.customStyle === 'string'
-        ? JSON.parse(options.customStyle)
-        : options.customStyle;
-    }
+    const config: any = buildMTCaptchaConfig(options);
 
     // Set callback names (default to our global callbacks if not specified)
     config['rendered-callback'] = options.renderedCallback || 'mt_renderedcb';
@@ -190,6 +165,22 @@ export class MTCaptchaService {
    */
   getVerifiedToken(): string | null {
     return this.tokenSubject.getValue();
+  }
+
+  /**
+   * Return the current captcha state (e.g. isVisible to know if Low Friction Invisible kicked in)
+   * Pass the captcha DOM id when several captchas are rendered on the page
+   */
+  getStatus(domId?: string): MTCaptchaStatus | null {
+    if (!isPlatformBrowser(this.platformId)) {
+      return null;
+    }
+
+    const windowAny = window as any;
+    if (typeof windowAny.mtcaptcha !== 'undefined' && typeof windowAny.mtcaptcha.getStatus === 'function') {
+      return windowAny.mtcaptcha.getStatus(domId);
+    }
+    return null;
   }
 
   /**

@@ -94,9 +94,68 @@ export class AppModule { }
 |-------|------|----------|---------|-------------|
 | `sitekey` | `string` | Yes | `""` | Your MTCaptcha sitekey |
 | `theme` | `string` | No | - | Theme for the captcha widget |
-| `widgetSize` | `'mini' \| 'standard'` | No | `'standard'` | Size of the captcha widget |
+| `widgetSize` | `'mini' \| 'standard'` | No | `'standard'` | Size of the captcha widget (`'mini'` is the compact form factor) |
+| `miniFormWidth` | `number` | No | responsive | Width in px of the `'mini'` widget (265-600) |
+| `miniFormHeight` | `number` | No | `45` | Height in px of the `'mini'` widget (42-55) |
+| `lang` | `string` | No | `'en'` | Language code of the widget, e.g. `'fr'`, `'nl'`, `'de'` |
+| `lowFrictionInvisible` | `'force-visible'` | No | - | Always show a visible captcha, even when Low Friction Invisible is enabled for the site |
+| `loadAnimation` | `boolean` | No | `true` | Show the loading animation (set to `false` with invisible captcha) |
 | `customLangText` | `Record<string, any> \| string` | No | - | Custom language text (JSON object or JSON string) |
 | `customStyle` | `Record<string, any> \| string` | No | - | Custom styling (JSON object or JSON string) |
+| `customAccessibilityText` | `Record<string, MTCaptchaAccessibilityText> \| string` | No | - | Custom aria texts for screen readers, keyed by language code (JSON object or JSON string) |
+
+#### Language
+
+```html
+<ng-mtcaptcha [sitekey]="sitekey" lang="fr"></ng-mtcaptcha>
+```
+
+#### Compact widget
+
+```html
+<ng-mtcaptcha [sitekey]="sitekey" widgetSize="mini" [miniFormWidth]="300" [miniFormHeight]="45"></ng-mtcaptcha>
+```
+
+#### Invisible captcha
+
+Invisible captcha (Low Friction Invisible or IP Whitelist Invisible) is enabled per site in the
+MTCaptcha Admin Portal > Sites module, not in code. On the Angular side, disable the loading animation;
+the `token` output then emits without any user interaction, and the `rendered` output only fires if a
+visible challenge is shown:
+
+```html
+<ng-mtcaptcha [sitekey]="sitekey" [loadAnimation]="false" (token)="onToken($event)"></ng-mtcaptcha>
+```
+
+Use `lowFrictionInvisible="force-visible"` on workflows that must always show a challenge (e.g. registration),
+and `MTCaptchaService.getStatus()?.isVisible` to know whether the captcha is currently visible.
+
+#### Accessibility
+
+MTCaptcha is WCAG 2.1 compliant (audio challenge, keyboard navigation, aria labels). The aria texts
+can be customized per language with `customAccessibilityText` (90 characters max per text):
+
+```typescript
+customAccessibilityText = {
+  fr: {
+    default: {
+      iframeTitle: 'Vérification anti-robot',
+      audioButton: 'Écouter le captcha audio',
+      reloadButton: 'Charger un nouveau captcha',
+      inputTextForm: 'Saisissez le texte du captcha',
+    },
+    validationSuccess: { reloadButton: 'Captcha validé' },
+  },
+};
+```
+
+```html
+<ng-mtcaptcha [sitekey]="sitekey" lang="fr" [customAccessibilityText]="customAccessibilityText"></ng-mtcaptcha>
+```
+
+Available keys: `default` (`requireCSS`, `privacyLink`, `termsLink`, `poweredByLink`, `audioButton`, `image`,
+`inputTextForm`, `reloadButton`, `iframeTitle`), `loadingNew`, `captchaNewlyLoaded`, `verifyingInput`,
+`validationFailed`, `validationSuccess`, `tokenTimeOut` (`reloadButton`) and `challengeIncomplete` (`inputTextForm`).
 
 #### Outputs
 
@@ -152,6 +211,7 @@ export class ExampleComponent implements OnInit {
 #### Methods
 
 - `getVerifiedToken(): string | null` - Returns the current verified token synchronously. Returns the token if captcha is solved, `null` if not solved or expired
+- `getStatus(domId?: string): MTCaptchaStatus | null` - Returns the current captcha state (`isVerified`, `isVisible`, `verifiedToken`, ...). Pass the captcha DOM id when several captchas are on the page
 - `showMandatory(): void` - Shows mandatory error on captcha if not solved. Call this when user tries to submit form without solving captcha
 - `setGlobalConfig(options: MTCaptchaOptions): void` - Configure global MTCaptcha settings
 
@@ -169,10 +229,16 @@ export class ExampleComponent implements OnInit {
 interface MTCaptchaOptions {
   sitekey: string;
   theme?: string;                                  // Theme for the captcha widget (supports any theme value)
-  widgetSize?: 'mini' | 'standard';               // Widget size: 'mini' or 'standard' (default: 'standard')
+  widgetSize?: 'mini' | 'standard';               // Widget size: 'mini' (compact) or 'standard' (default: 'standard')
+  miniFormWidth?: number;                          // Width in px of the 'mini' widget (265-600)
+  miniFormHeight?: number;                         // Height in px of the 'mini' widget (42-55, default: 45)
+  lang?: string;                                   // Language code, e.g. 'fr' (default: 'en')
+  lowFrictionInvisible?: 'force-visible';          // Always show the captcha even with Low Friction Invisible enabled
+  loadAnimation?: boolean;                         // Show the loading animation (default: true)
   callbackName?: string;
   customLangText?: Record<string, any> | string;  // JSON object or JSON string
   customStyle?: Record<string, any> | string;       // JSON object or JSON string
+  customAccessibilityText?: Record<string, MTCaptchaAccessibilityText> | string;  // Aria texts keyed by language code
   renderedCallback?: string;                       // Custom rendered callback name (default: 'mt_renderedcb')
   verifiedCallback?: string;                       // Custom verified callback name (default: 'mt_verifiedcb')
   verifyexpiredCallback?: string;                  // Custom expired callback name (default: 'mt_verifyexpiredcb')

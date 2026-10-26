@@ -12,6 +12,8 @@ import {
 } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MTCaptchaService } from './mtcaptcha.service';
+import { buildMTCaptchaConfig } from './mtcaptcha.config';
+import { MTCaptchaAccessibilityText, MTCaptchaWidgetSize } from './mtcaptcha.types';
 
 @Component({
   selector: 'ng-mtcaptcha',
@@ -30,9 +32,15 @@ export class MTCaptchaComponent implements AfterViewInit, OnDestroy {
 
   @Input() sitekey = "";
   @Input() theme?: string;
-  @Input() widgetSize: 'mini' | 'standard' = 'standard';
+  @Input() widgetSize: MTCaptchaWidgetSize = 'standard';
+  @Input() miniFormWidth?: number;
+  @Input() miniFormHeight?: number;
+  @Input() lang?: string;
+  @Input() lowFrictionInvisible?: 'force-visible';
+  @Input() loadAnimation?: boolean;
   @Input() customLangText?: Record<string, any> | string;
   @Input() customStyle?: Record<string, any> | string;
+  @Input() customAccessibilityText?: Record<string, MTCaptchaAccessibilityText> | string;
   
   @Output() token = new EventEmitter<string>();
   @Output() rendered = new EventEmitter<void>();
@@ -97,6 +105,8 @@ export class MTCaptchaComponent implements AfterViewInit, OnDestroy {
     windowAny.mtcaptchaConfig['verified-callback'] = 'mt_verifiedcb';
     windowAny.mtcaptchaConfig['verifyexpired-callback'] = 'mt_verifyexpiredcb';
     windowAny.mtcaptchaConfig['error-callback'] = 'mt_errorcb';
+    // Explicit rendering: each component renders its own widget with its own config
+    windowAny.mtcaptchaConfig.render = 'explicit';
     if (!windowAny.mtcaptchaConfig.renderQueue) {
       windowAny.mtcaptchaConfig.renderQueue = [];
     }
@@ -133,30 +143,25 @@ export class MTCaptchaComponent implements AfterViewInit, OnDestroy {
 
     // Set component-specific configuration
     const config: any = {
-      sitekey: this.sitekey,
-      widgetSize: this.widgetSize,
+      ...buildMTCaptchaConfig({
+        sitekey: this.sitekey,
+        theme: this.theme,
+        widgetSize: this.widgetSize,
+        miniFormWidth: this.miniFormWidth,
+        miniFormHeight: this.miniFormHeight,
+        lang: this.lang,
+        lowFrictionInvisible: this.lowFrictionInvisible,
+        loadAnimation: this.loadAnimation,
+        customLangText: this.customLangText,
+        customStyle: this.customStyle,
+        customAccessibilityText: this.customAccessibilityText,
+      }),
       // Set callbacks to use service callbacks
       'rendered-callback': 'mt_renderedcb',
       'verified-callback': 'mt_verifiedcb',
       'verifyexpired-callback': 'mt_verifyexpiredcb',
       'error-callback': 'mt_errorcb',
     };
-
-    if (this.theme) {
-      config.theme = this.theme;
-    }
-
-    if (this.customLangText) {
-      config.customLangText = typeof this.customLangText === 'string'
-        ? JSON.parse(this.customLangText)
-        : this.customLangText;
-    }
-
-    if (this.customStyle) {
-      config.customStyle = typeof this.customStyle === 'string'
-        ? JSON.parse(this.customStyle)
-        : this.customStyle;
-    }
 
     // Merge component config with global config (preserve renderQueue)
     const existingRenderQueue = windowAny.mtcaptchaConfig.renderQueue || [];
@@ -188,24 +193,13 @@ export class MTCaptchaComponent implements AfterViewInit, OnDestroy {
       })
     );
 
-    // Use explicit rendering - add this captcha's ID to render queue
+    // Use explicit rendering with this captcha's ID and config
     // This allows multiple captchas on the same page (critical for SPA)
-    if (typeof windowAny.renderExplicitCaptcha === 'function') {
-      // If renderExplicitCaptcha is available, use it
-      windowAny.mtcaptchaConfig.renderQueue.push(this.captchaId);
-      windowAny.renderExplicitCaptcha();
+    if (windowAny.mtcaptcha && typeof windowAny.mtcaptcha.renderUI === 'function') {
+      windowAny.mtcaptcha.renderUI(this.captchaId, config);
     } else {
-      // Fallback: wait for script to be fully ready
-      const checkAndRender = setInterval(() => {
-        if (typeof windowAny.renderExplicitCaptcha === 'function') {
-          windowAny.mtcaptchaConfig.renderQueue.push(this.captchaId);
-          windowAny.renderExplicitCaptcha();
-          clearInterval(checkAndRender);
-        }
-      }, 100);
-
-      // Timeout after 5 seconds
-      setTimeout(() => clearInterval(checkAndRender), 5000);
+      // Script not loaded yet: MTCaptcha renders queued IDs on load
+      windowAny.mtcaptchaConfig.renderQueue.push(this.captchaId);
     }
   }
 
@@ -213,5 +207,11 @@ export class MTCaptchaComponent implements AfterViewInit, OnDestroy {
     // Unsubscribe from all service observables
     this.subscriptions.forEach(sub => sub.unsubscribe());
     this.subscriptions = [];
+
+    // Remove the widget so it can be rendered again when the component is re-created
+    const windowAny = window as any;
+    if (windowAny.mtcaptcha && typeof windowAny.mtcaptcha.remove === 'function') {
+      windowAny.mtcaptcha.remove(this.captchaId);
+    }
   }
 }
